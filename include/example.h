@@ -1,5 +1,5 @@
 /** \mainpage Zagar.io
-Better than Agar.io
+parody for Agar.io
 */
 
 #include <stdlib.h>
