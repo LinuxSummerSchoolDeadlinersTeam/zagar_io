@@ -5,50 +5,59 @@
 #define SERVER_CONTROLS_H
 
 ///Struct for two values X, Y.
-struct xy {
+typedef struct xy {
 	int x; ///<	X value.
 	int y; ///<	Y value.
-};
+} xy_t;
 
 ///Struct containing global game parameters.
-struct game_parameters {
+typedef struct game_parameters {
 	int def_size; ///<		Default player size.
 	float def_speed; ///<	Default player speed.
 	float def_drag; ///<	Default drag force.
-};
+} game_parameters_t;
 
 ///Struct containing player parameters.
-struct player {
-	int color; ///<				Player color.//TODO color type 
+typedef struct player {
+	int color; ///<				Player color.\TODO color type 
 	int size; ///<				Player size.
-	struct xy position; ///<	Player position on the field.
-	struct xy speed; ///<		Player speed in X, Y direction.
+	xy_t position; ///<	Player position on the field.
+	xy_t speed; ///<		Player speed in X, Y direction.
 	float drag; ///<			How much force slows player down.
-};
+} player_t;
+
+///Struct containing player parameters.
+typedef struct pellet {
+	int color; ///<				Player color.\TODO color type 
+	int size; ///<				Player size.
+	xy_t position; ///<	Player position on the field.
+} pellet_t;
 
 ///Game field struct.
-struct gamefield {
-	struct xy size; ///<			Field size.
-	struct player *players; ///<	Players array.
-	int players_count; ///<			Number of players.
-};
+typedef struct gamefield {
+	xy_t size; ///<			Field size.
+	player_t *players; ///<	Players array.
+	int players_count; ///<	Number of players.
+	pellet_t *pellets; ///<	Pellets array.
+	int pellets_count; ///<	Number of pellets.
+} gamefield_t;
 
 /**Create game field.
-\param int					Field width.
-\param int					Field heigth.
-\return struct gamefield*	Returns pointer to struct gamefield.
+\param int				Field width.
+\param int				Field heigth.
+\return gamefield_t*	Returns pointer to struct gamefield.
 */
-struct gamefield* gamefield_create(int, int);
+gamefield_t* gamefield_create(int, int);
 
 /**Add player to game field.
-\param struct gamefield*	Gamefield struct pointer.
-\return int					Returns number of player if success, else -1.
+\param gamefield_t*	Gamefield struct pointer.
+\return int			Returns number of player if success, else -1.
 */
-int gamefield_add(struct gamefield*);
+int gamefield_add(gamefield_t*);
 
 /**Begin server calculations, collision detections etc.
-\param struct gamefield*	Gamefield struct pointer.
-\return int					Return 0 of success, else -1;	
+\param gamefield_t*	Gamefield struct pointer.
+\return int			Return 0 of success, else -1;	
 */
-int gamefield_start(struct gamefield*);
+int gamefield_start(gamefield_t*);
 #endif
