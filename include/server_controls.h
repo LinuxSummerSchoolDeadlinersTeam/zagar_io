@@ -1,6 +1,3 @@
-#include <pthread.h>
-#include <malloc.h>
-
 #ifndef SERVER_CONTROLS_H
 #define SERVER_CONTROLS_H
 
@@ -9,9 +6,9 @@
 ///Event id when player ate a pellet.\warning Need arg of type struct xy_t when used! x - pellet eaten id and y - pellet ate id.
 #define EVENT_PELLET_EATEN 2
 ///Event id when player change size.\warning Need arg of type struct xy_t when used! x - player id and y - size.\todo Shoot yourself into players.
-#define EVENT_PLAYER_SIZE 1
+#define EVENT_PLAYER_SIZE 3
 ///Event id when player moves.\warning Need arg of type int when used!
-#define EVENT_PLAYER_MOVE 3
+#define EVENT_PLAYER_MOVE 4
 
 ///Struct for two values type of int.\note Used for coordinates, speed, or as argument for event.
 typedef struct xy {
@@ -72,8 +69,9 @@ int gamefield_add(gamefield_t*);
 
 /**Begin server calculations, collision detections etc.
 \param gamefield_t*	Gamefield struct pointer.
-\param event_t* 	Array of events pointer.\todo Maybe implement socket. But i hope there will be ony one elment.
+\param event_t* 	Array of output events pointer.\todo Maybe implement socket. But i hope there will be ony one elment.
+\param event_t* 	Array of input events pointer.\todo Maybe implement socket. But i hope there will be ony one elment.
 \return int		Return 0 of success, else -1;	
 */
-int gamefield_start(gamefield_t*, event_t*);
+int gamefield_start(gamefield_t*, event_t*, event_t*);
 #endif
