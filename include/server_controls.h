@@ -1,3 +1,9 @@
+#include <pthread.h>
+#include <malloc.h>
+#include <stdlib.h>
+#include <time.h>
+#include <unistd.h>
+
 #ifndef SERVER_CONTROLS_H
 #define SERVER_CONTROLS_H
 
@@ -18,9 +24,13 @@ typedef struct xy {
 
 ///Struct containing global game parameters.
 typedef struct game_parameters {
-	int def_size; ///<	Default player size.
-	float def_speed; ///<	Default player speed.
-	float def_drag; ///<	Default drag force.
+	int def_player_size; ///<	Default player size.
+	int def_pellet_size; ///<	Default pellet size.
+	float def_speed; ///<		Default maximum player speed.
+	float def_accel; ///<		Default acceleration.
+	float def_drag; ///<		Default drag force.
+	useconds_t player_pace; ///<	Time in usec between every move cycle.
+	useconds_t pellet_pace; ///<	Time in usec between every pellet generation.
 } game_parameters_t;
 
 ///Struct containing player parameters.
@@ -34,9 +44,9 @@ typedef struct player {
 
 ///Struct containing player parameters.
 typedef struct pellet {
-	int color; ///<		Player color.\todo Color type.
-	int size; ///<		Player size.
-	xy_t position; ///<	Player position on the field.
+	int color; ///<		Pellet color.\todo Color type.
+	int size; ///<		Pellet size.
+	xy_t position; ///<	Pellet position on the field.
 } pellet_t;
 
 ///Game field struct.
@@ -71,7 +81,13 @@ int gamefield_add(gamefield_t*);
 \param gamefield_t*	Gamefield struct pointer.
 \param event_t* 	Array of output events pointer.\todo Maybe implement socket. But i hope there will be ony one elment.
 \param event_t* 	Array of input events pointer.\todo Maybe implement socket. But i hope there will be ony one elment.
-\return int		Return 0 of success, else -1;	
+\return int		Return 0 if success, else -1.	
 */
 int gamefield_start(gamefield_t*, event_t*, event_t*);
+
+/**Cancel server controls threads, free gamefield structures.\warning Won't free events arrays.
+\param gamefield_t*	Gamefield struct pointer.
+\return int		Return 0 if success, else spinning emmensly begging for death.
+*/
+int gamefield_free(gamefield_t* gamefield);
 #endif
