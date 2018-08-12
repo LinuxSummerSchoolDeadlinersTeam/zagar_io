@@ -5,37 +5,73 @@ game_parameters_t game_parameters;
 pthread_t *tid;
 event_t **event_glob_in;
 event_t **event_glob_out;
-//pthread_spinlock_t spinlock;
-pthread_mutex_t spinlock;///<\todo EBANYE SPINLOKI
+pthread_spinlock_t spinlock_event;
 
 int gamefield_free(gamefield_t* gamefield)
 {
 	int i;
+	//Cancel threads
 	for(i = 0; i < SERVER_CONTROLS_THREADS_COUNT; i++)
 	{
 		pthread_cancel(tid[i]);
 		pthread_join(tid[i], NULL);
 	}
 	free(tid);
+	//Free events lists
+	if(*event_glob_in != NULL)
+	{
+		event_t *event_ptr;
+		event_ptr = *event_glob_in;
+		if(event_ptr->next == NULL)
+			free(event_ptr);
+		else
+		{
+			event_t *event_prev_ptr;
+			while(event_ptr->next != NULL)
+			{
+				event_prev_ptr = event_ptr;
+				event_ptr = event_ptr->next;
+				free(event_prev_ptr);
+			}
+			free(event_ptr);
+		}
+	}
+	if(*event_glob_out != NULL)
+	{
+		event_t *event_ptr;
+		event_ptr = *event_glob_out;
+		if(event_ptr->next == NULL)
+			free(event_ptr);
+		else
+		{
+			event_t *event_prev_ptr;
+			while(event_ptr->next != NULL)
+			{
+				event_prev_ptr = event_ptr;
+				event_ptr = event_ptr->next;
+				free(event_prev_ptr);
+			}
+			free(event_ptr);
+		}
+	}
+	//Free gamefield
 	free(gamefield->players);
 	free(gamefield->pellets);
 	free(gamefield);
-	//pthread_spin_destroy(&spinlock);
-	pthread_mutex_destroy(&spinlock);
+	pthread_spin_destroy(&spinlock_event);
 	return 0;
 }
 
 gamefield_t* gamefield_create(int width, int height)
 {
 	srand(time(NULL));
-	//pthread_spin_init(&spinlock, PTHREAD_PROCESS_SHARED);
-	pthread_mutex_init(&spinlock, NULL);
-	game_parameters.def_player_size = 10;
+	pthread_spin_init(&spinlock_event, PTHREAD_PROCESS_SHARED);
+	game_parameters.def_player_size = 500;
 	game_parameters.def_pellet_size = 5;
 	game_parameters.def_speed = 100;
-	game_parameters.def_accel = 10;
+	game_parameters.def_accel = 2;
 	game_parameters.def_drag = 1;
-	game_parameters.player_pace = 200000;
+	game_parameters.player_pace = 500000;
 	game_parameters.pellet_pace = 1000000;
 
 	gamefield_t *gamefield = malloc(sizeof(gamefield_t));
@@ -54,7 +90,8 @@ int gamefield_add(gamefield_t* gamefield)
 	gamefield->players = realloc(gamefield->players, (gamefield->players_count + 1) * sizeof(player_t));
 	if(gamefield->players == NULL) return -1;
 	player_t player;
-	player.color = 0; ///\todo Random color.
+	player.alive = 1;
+	player.color = 0; ///\todo Color.
 	player.size = game_parameters.def_player_size;
 	player.position.x = rand()%gamefield->size.x;
 	player.position.y = rand()%gamefield->size.y;
@@ -62,7 +99,7 @@ int gamefield_add(gamefield_t* gamefield)
 	player.speed.y = 0;
 	player.accel.x = 0;
 	player.accel.y = 0;
-	player.drag = 0;
+	player.drag = game_parameters.def_drag;
 	gamefield->players[player_id] = player;
 	gamefield->players_count++;
 	return player_id;
@@ -94,27 +131,81 @@ void *cycle_move(void* v_gamefield)
 	{
 		for(i = 0; i < gamefield->players_count; i++)
 		{
-			//Acceleration
-			if(gamefield->players[i].speed.x < game_parameters.def_speed)
-				gamefield->players[i].speed.x += gamefield->players[i].accel.x;
-			else
-				gamefield->players[i].speed.x = game_parameters.def_speed;
-			if(gamefield->players[i].speed.y < game_parameters.def_speed)
-				gamefield->players[i].speed.y += gamefield->players[i].accel.y;
-			else
-				gamefield->players[i].speed.y = game_parameters.def_speed;
-			//Drag
-			if(gamefield->players[i].speed.x > 0)
-				gamefield->players[i].speed.x -= gamefield->players[i].drag;
-			else
-				gamefield->players[i].speed.x = 0;
-			if(gamefield->players[i].speed.y > 0)
-				gamefield->players[i].speed.y -= gamefield->players[i].drag;
-			else
-				gamefield->players[i].speed.y = 0;
-			//Move
-			gamefield->players[i].position.x += gamefield->players[i].speed.x;
-			gamefield->players[i].position.y += gamefield->players[i].speed.y;
+			if(gamefield->players[i].alive)
+			{
+				//Acceleration
+				//horizontal
+				if(abs(gamefield->players[i].speed.x) < game_parameters.def_speed)
+					gamefield->players[i].speed.x += gamefield->players[i].accel.x;
+				else
+					if(gamefield->players[i].speed.x >= 0)
+						gamefield->players[i].speed.x = game_parameters.def_speed;
+					else
+						gamefield->players[i].speed.x = -1 * game_parameters.def_speed;
+				//vertical
+				if(abs(gamefield->players[i].speed.y) < game_parameters.def_speed)
+					gamefield->players[i].speed.y += gamefield->players[i].accel.y;
+				else
+					if(gamefield->players[i].speed.y >= 0)
+						gamefield->players[i].speed.y = game_parameters.def_speed;
+					else
+						gamefield->players[i].speed.y = -1 * game_parameters.def_speed;
+				//Drag
+				//horizontal
+				if(gamefield->players[i].speed.x > 0)
+					if(gamefield->players[i].speed.x - gamefield->players[i].drag > 0)
+						gamefield->players[i].speed.x -= gamefield->players[i].drag;
+					else
+						gamefield->players[i].speed.x = 0;
+				if(gamefield->players[i].speed.x < 0)
+					if(gamefield->players[i].speed.x + gamefield->players[i].drag < 0)
+						gamefield->players[i].speed.x += gamefield->players[i].drag;
+					else
+						gamefield->players[i].speed.x = 0;
+				//vertical
+				if(gamefield->players[i].speed.y > 0)
+					if(gamefield->players[i].speed.y - gamefield->players[i].drag > 0)
+						gamefield->players[i].speed.y -= gamefield->players[i].drag;
+					else
+						gamefield->players[i].speed.y = 0;
+				if(gamefield->players[i].speed.y < 0)
+					if(gamefield->players[i].speed.y + gamefield->players[i].drag < 0)
+						gamefield->players[i].speed.y += gamefield->players[i].drag;
+					else
+						gamefield->players[i].speed.x = 0;
+				//Move
+				gamefield->players[i].position.x += gamefield->players[i].speed.x;
+				gamefield->players[i].position.y += gamefield->players[i].speed.y;
+				//Wall hit
+				//right
+				if(gamefield->players[i].position.x >= gamefield->size.x) {
+					gamefield->players[i].position.x = gamefield->size.x;
+					gamefield->players[i].accel.x = 0;
+					gamefield->players[i].speed.x = 0;
+					continue;
+				}
+				//left
+				if(gamefield->players[i].position.x <= 0) {
+					gamefield->players[i].position.x = 0;
+					gamefield->players[i].accel.x = 0;
+					gamefield->players[i].speed.x = 0;
+					continue;
+				}
+				//bottom
+				if(gamefield->players[i].position.y >= gamefield->size.y) {
+					gamefield->players[i].position.y = gamefield->size.y;
+					gamefield->players[i].accel.y = 0;
+					gamefield->players[i].speed.y = 0;
+					continue;
+				}
+				//top
+				if(gamefield->players[i].position.y <= 0) {
+					gamefield->players[i].position.y = 0;
+					gamefield->players[i].accel.y = 0;
+					gamefield->players[i].speed.y = 0;
+					continue;
+				}
+			}
 		}
 		usleep(game_parameters.player_pace); ///\todo Global timer.
 		pthread_testcancel();
@@ -127,7 +218,7 @@ void *cycle_move(void* v_gamefield)
 //};
 
 //void *cycle_controls_in(void* v_gamefield_and_events)
-void *cycle_controls_in(void* v_gamefield)///<\todo PEREDAT YKAZATEL NA *EVENT V PARAMETER
+void *cycle_controls_in(void* v_gamefield)
 {
 	//struct gamefield_and_events *gamefield_and_events = v_gamefield_and_events;
 	//gamefield_t *gamefield = gamefield_and_events->gamefield;
@@ -138,21 +229,49 @@ void *cycle_controls_in(void* v_gamefield)///<\todo PEREDAT YKAZATEL NA *EVENT V
 	{
 		//event = event_get(event_in);
 		event = event_get(event_glob_in);
-		//if(event.event_id != -1)
-		//	printf("!!!!!!!!!!!!!!!!!GOT!!!!!!!!!!!!!!!!!!!!!!!!!!!!%d\n", event.event_id);
+		if(event.event_id != -1) //if event got
+			if(gamefield->players[event.arg_x].alive) //if palyer alive
+				switch(event.event_id) {
+					case 4:
+						switch(event.arg_y) {
+							case 1:
+								gamefield->players[event.arg_x].accel.y = -1 * game_parameters.def_accel;
+								gamefield->players[event.arg_x].accel.x = 0;
+								break;
+							case 2:
+								gamefield->players[event.arg_x].accel.y = game_parameters.def_accel;
+								gamefield->players[event.arg_x].accel.x = 0;
+								break;
+							case 3:
+								gamefield->players[event.arg_x].accel.x = -1 * game_parameters.def_accel;
+								gamefield->players[event.arg_x].accel.y = 0;
+								break;
+							case 4:
+								gamefield->players[event.arg_x].accel.x = game_parameters.def_accel;
+								gamefield->players[event.arg_x].accel.y = 0;
+								break;
+							case 0:
+								gamefield->players[event.arg_x].accel.y = 0;
+								gamefield->players[event.arg_x].accel.x = 0;
+								break;
+						}
+						break;
+				}
 		pthread_testcancel();
 	}
 }
 
 //void *cycle_controls_out(void* v_gamefield_and_events)
-void *cycle_controls_out(void* v_gamefield)///<\todo PEREDAT YKAZATEL NA *EVENT V PARAMETER
+void *cycle_controls_out(void* v_gamefield)
 {
 	//struct gamefield_and_events *gamefield_and_events = v_gamefield_and_events;
 	//gamefield_t *gamefield = gamefield_and_events->gamefield;
 	//event_t **event_out = *gamefield_and_events->event;
 	gamefield_t *gamefield = v_gamefield;
 	//int i=0;
-	//event_t event;
+	event_t event;
+	int comp_who, comp_with, pellet_i;
+	float distance;
 	while(1)
 	{
 		//i++;
@@ -164,6 +283,80 @@ void *cycle_controls_out(void* v_gamefield)///<\todo PEREDAT YKAZATEL NA *EVENT 
 	 	//if(event_set(event_glob_out, event) < 0)
 		//	perror("Can't set event");
 		//sleep(1);
+		event.next = NULL;
+		event.event_id = EVENT_PLAYER_EATEN;
+		//Player collision detection
+		if(gamefield->players_count > 1)
+			for(comp_who = 0; comp_who < gamefield->players_count - 1; comp_who++)
+				for(comp_with = comp_who + 1; comp_with < gamefield->players_count; comp_with++)
+				{
+					if(gamefield->players[comp_who].alive && gamefield->players[comp_with].alive) //if both players alive
+					{
+						distance = sqrt( //hypotesis
+							pow(abs(gamefield->players[comp_who].position.x - gamefield->players[comp_with].position.x), 2) + //leg x
+							pow(abs(gamefield->players[comp_who].position.y - gamefield->players[comp_with].position.y), 2)); //leg y
+
+						//if(comp_who == 0 && comp_with == 1)
+						//{
+						//	printf("DIST: %f\n", distance);
+						//}
+						//Player eaten event
+						if(distance <= gamefield->players[comp_who].size)
+						{
+							gamefield->players[comp_with].alive = 0;
+							event.arg_x = comp_who;
+							event.arg_y = comp_with;
+							if(event_set(event_glob_out, event) < 0)
+								perror("Can't set event");
+							continue;
+						}
+						if(distance <= gamefield->players[comp_with].size)
+						{
+							gamefield->players[comp_who].alive = 0;
+							event.arg_x = comp_with;
+							event.arg_y = comp_who;
+							if(event_set(event_glob_out, event) < 0)
+								perror("Can't set event");
+							continue;
+						}
+					}
+				}
+		//Pellet collision detection
+		for(comp_who = 0; comp_who < gamefield->players_count; comp_who++)
+			for(comp_with = 0; comp_with < gamefield->pellets_count; comp_with++)
+			{
+				if(gamefield->players[comp_who].alive) //if player alive
+				{
+					distance = sqrt( //hypotesis
+						pow(abs(gamefield->players[comp_who].position.x - gamefield->pellets[comp_with].position.x), 2) + //leg x
+						pow(abs(gamefield->players[comp_who].position.y - gamefield->pellets[comp_with].position.y), 2)); //leg y
+					if(distance <= gamefield->players[comp_who].size)
+					{
+						//Size increase event
+						gamefield->players[comp_who].size += gamefield->pellets[comp_with].size;
+						event.event_id = EVENT_PLAYER_SIZE;
+						event.arg_x = comp_who;
+						event.arg_y = gamefield->pellets[comp_with].size;
+						if(event_set(event_glob_out, event) < 0)
+							perror("Can't set event");
+						//printf("PELLET %d: %f\n", comp_with, distance);
+						//Remove pellet from array
+						for(pellet_i = comp_with; pellet_i < gamefield->pellets_count - 1; pellet_i++)
+						{
+							gamefield->pellets[pellet_i] = gamefield->pellets[pellet_i+1];
+							gamefield->pellets_count--;
+							gamefield->pellets = realloc(gamefield->pellets, (gamefield->pellets_count) * sizeof(pellet_t));
+						}
+						//Pellet eaten event
+						event.event_id = EVENT_PELLET_EATEN;
+						event.arg_x = comp_who;
+						event.arg_y = comp_with;
+						if(event_set(event_glob_out, event) < 0)
+							perror("Can't set event");
+						continue;
+					}
+				}
+			}
 		pthread_testcancel();
 	}
 }
@@ -198,16 +391,14 @@ int gamefield_start(gamefield_t* gamefield, event_t** event_out, event_t** event
 
 int event_set(event_t **event_list, event_t event)
 {
-	//pthread_spin_lock(&spinlock);
-	pthread_mutex_lock(&spinlock);
+	pthread_spin_lock(&spinlock_event);
 	event_t *new_event = malloc(sizeof(event_t));
 	if(new_event == NULL)
 		return -1;
 	*new_event = event;
 	if(*event_list == NULL) {
 		*event_list = new_event;
-		//pthread_spin_unlock(&spinlock);
-		pthread_mutex_unlock(&spinlock);
+		pthread_spin_unlock(&spinlock_event);
 		return 0;
 	}
 	else {
@@ -215,12 +406,10 @@ int event_set(event_t **event_list, event_t event)
 		while(event_ptr->next != NULL)
 			event_ptr = event_ptr->next;
 		event_ptr->next = new_event;
-		//pthread_spin_unlock(&spinlock);
-		pthread_mutex_unlock(&spinlock);
+		pthread_spin_unlock(&spinlock_event);
 		return 0;
 	}
-	//pthread_spin_unlock(&spinlock);
-		pthread_mutex_unlock(&spinlock);
+	pthread_spin_unlock(&spinlock_event);
 	return -1;
 }
 
@@ -228,11 +417,9 @@ event_t event_get(event_t **event_list)
 {
 	event_t got_event;
 	got_event.event_id = -1;
-	//pthread_spin_lock(&spinlock);
-	pthread_mutex_lock(&spinlock);
+	pthread_spin_lock(&spinlock_event);
 	if(*event_list == NULL) {
-		//pthread_spin_unlock(&spinlock);
-		pthread_mutex_unlock(&spinlock);
+		pthread_spin_unlock(&spinlock_event);
 		return got_event;
 	}
 
@@ -240,8 +427,7 @@ event_t event_get(event_t **event_list)
 		got_event = **event_list;
 		free(*event_list);
 		*event_list = NULL;
-		//pthread_spin_unlock(&spinlock);
-		pthread_mutex_unlock(&spinlock);
+		pthread_spin_unlock(&spinlock_event);
 		return got_event;
 	}
 	else {
@@ -254,11 +440,9 @@ event_t event_get(event_t **event_list)
 		got_event = *event_ptr;
 		free(event_ptr);
 		prev_event_ptr->next = NULL;
-		//pthread_spin_unlock(&spinlock);
-		pthread_mutex_unlock(&spinlock);
+		pthread_spin_unlock(&spinlock_event);
 		return got_event;
 	}
-	//pthread_spin_unlock(&spinlock);
-		pthread_mutex_unlock(&spinlock);
+	pthread_spin_unlock(&spinlock_event);
 	return got_event;
 }

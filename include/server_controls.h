@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <math.h>
 
 #ifndef SERVER_CONTROLS_H
 #define SERVER_CONTROLS_H
@@ -11,10 +12,12 @@
 #define EVENT_PLAYER_EATEN 1
 ///Event id when player ate a pellet.\warning Need both args when used in event_t! x - pellet eaten id and y - pellet ate id.
 #define EVENT_PELLET_EATEN 2
-///Event id when player change size.\warning Need both args when used in event_t! x - player id and y - size.\todo Shoot yourself into players.
+///Event id when player change size.\warning Need both args when used in event_t! x - player id and y - size.
 #define EVENT_PLAYER_SIZE 3
-///Event id when player moves.\warning Need only argument X when used! 1 - up, 2 - down, 3 - left, 4 - right and 0 - if all buttons released.
+///Event id when player moves.\warning Need both args when used in event_t! x - player id and y = 1 - up, 2 - down, 3 - left, 4 - right and 0 - if all buttons released.
 #define EVENT_PLAYER_MOVE 4
+///Event id when syncronization needed.\warning No arguments needed.\todo Sync.
+#define EVENT_SYNC 5
 
 ///Struct for two values type of int.\note Used for coordinates, speed, or as argument for event.
 typedef struct xy {
@@ -35,6 +38,7 @@ typedef struct game_parameters {
 
 ///Struct containing player parameters.
 typedef struct player {
+	int alive; ///<		Player status. 1 - alive, 0 - dead.
 	int color; ///<		Player color.\todo Color type.
 	int size; ///<		Player size.
 	xy_t position; ///<	Player position on the field.
@@ -68,28 +72,28 @@ typedef struct event {
 } event_t;
 
 /**Create game field.
-\param int		Field width.
-\param int		Field heigth.
+\param width		Field width.
+\param heigth		Field heigth.
 \return gamefield_t*	Returns pointer to struct gamefield.
 */
-gamefield_t* gamefield_create(int, int);
+gamefield_t* gamefield_create(int width, int heigth);
 
 /**Add player to game field.
-\param gamefield_t*	Gamefield struct pointer.
+\param gamefield	Gamefield struct pointer.
 \return int		Returns number of player if success, else -1.
 */
-int gamefield_add(gamefield_t*);
+int gamefield_add(gamefield_t* gamefield);
 
 /**Begin server calculations, collision detections etc.
-\param gamefield_t*	Gamefield struct pointer.
-\param event_t** 	List of output events pointer.\todo Maybe implement socket. But i hope there will be ony one elment.
-\param event_t** 	List of input events pointer.\todo Maybe implement socket. But i hope there will be ony one elment.
+\param gamefield	Gamefield struct pointer.
+\param event_out	List of output events pointer.
+\param event_in		List of input events pointer.
 \return int		Return 0 if success, else -1.	
 */
-int gamefield_start(gamefield_t*, event_t**, event_t**);
+int gamefield_start(gamefield_t* gamefield, event_t** event_out, event_t** event_in);
 
-/**Cancel server controls threads, free gamefield structures.\warning Won't free events arrays.
-\param gamefield_t*	Gamefield struct pointer.
+/**Cancel server controls threads, free gamefield structures.
+\param gamefield	Gamefield struct pointer.
 \return int		Return 0 if success, else spinning emmensly begging for death.
 */
 int gamefield_free(gamefield_t* gamefield);
@@ -106,4 +110,24 @@ int event_set(event_t** event_list, event_t event);
 \return event_t		Return last event from list, or event_t with event_id = 0 if no events found.
 */
 event_t event_get(event_t** event_list);
+
+/**Make pellets cycle.
+\param v_gamefield	Gamefield struct pointer.
+*/
+void *cycle_make_pellet(void* v_gamefield);
+
+/**Move players cycle.
+\param v_gamefield	Gamefield struct pointer.
+*/
+void *cycle_move(void* v_gamefield);
+
+/**Read event_in list and change player moving variables cycle.
+\param v_gamefield	Gamefield struct pointer.
+*/
+void *cycle_controls_in(void* v_gamefield);
+
+/**Detect collision and add events to event_out cycle.
+\param v_gamefield	Gamefield struct pointer.
+*/
+void *cycle_controls_out(void* v_gamefield);
 #endif
