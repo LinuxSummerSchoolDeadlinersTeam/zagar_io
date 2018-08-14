@@ -39,6 +39,7 @@ typedef struct game_parameters {
 
 ///Struct containing player parameters.
 typedef struct player {
+	int id; ///<		Player id.
 	int alive; ///<		Player status. 1 - alive, 0 - dead.
 	int color; ///<		Player color.
 	int size; ///<		Player size.

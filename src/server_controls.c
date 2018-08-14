@@ -110,6 +110,7 @@ int gamefield_add(gamefield_t* gamefield)
 	gamefield->players = realloc(gamefield->players, (gamefield->players_count + 1) * sizeof(player_t));
 	if(gamefield->players == NULL) return -1;
 	player_t player;
+	player.id = player_id;
 	player.alive = 1;
 	player.color = gamefield->players_count + 1; //color equal player id
 	player.size = game_parameters.def_player_size;
