@@ -69,9 +69,12 @@ gamefield_t* gamefield_create(int width, int height)
 	int option_count = 0;
 	char *buf = malloc(1024);
 	int value;
-	FILE *file = fopen("../game.cfg", "r");
+	FILE *file = fopen("game.cfg", "r");
 	if(file == NULL)
+	{
 		perror("Can't open file");
+		return NULL;
+	}
 	else
 		while(fgets(buf, 1024, file) != NULL) {
 			if(buf[0] != '#') {
@@ -324,7 +327,7 @@ void *cycle_controls_out(void* v_gamefield)
 							event.arg_x = comp_who;
 							event.arg_y = comp_with;
 							if(event_set(event_glob_out, event) < 0)
-								perror("Can't set event");
+								perror("cycle_controls_out: Can't set event");
 							continue;
 						}
 						if(distance <= gamefield->players[comp_with].size)
@@ -333,7 +336,7 @@ void *cycle_controls_out(void* v_gamefield)
 							event.arg_x = comp_with;
 							event.arg_y = comp_who;
 							if(event_set(event_glob_out, event) < 0)
-								perror("Can't set event");
+								perror("cycle_controls_out: Can't set event");
 							continue;
 						}
 					}
@@ -358,7 +361,7 @@ void *cycle_controls_out(void* v_gamefield)
 							event.arg_x = comp_who;
 							event.arg_y = gamefield->pellets[comp_with].size;
 							if(event_set(event_glob_out, event) < 0)
-								perror("Can't set event");
+								perror("cycle_controls_out: Can't set event");
 							//printf("PELLET %d: %f\n", comp_with, distance);
 							//Remove pellet from array
 							for(pellet_i = comp_with; pellet_i < gamefield->pellets_count - 1; pellet_i++)
@@ -370,7 +373,7 @@ void *cycle_controls_out(void* v_gamefield)
 							event.arg_x = comp_who;
 							event.arg_y = comp_with;
 							if(event_set(event_glob_out, event) < 0)
-								perror("Can't set event");
+								perror("cycle_controls_out: Can't set event");
 							break;
 						}
 					}
