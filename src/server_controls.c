@@ -66,14 +66,31 @@ gamefield_t* gamefield_create(int width, int height)
 {
 	srand(time(NULL));
 	pthread_spin_init(&spinlock_event, PTHREAD_PROCESS_SHARED);
-	game_parameters.def_player_size = 500;
-	game_parameters.def_pellet_size = 5;
-	game_parameters.def_speed = 100;
-	game_parameters.def_accel = 2;
-	game_parameters.def_drag = 1;
-	game_parameters.player_pace = 500000;
-	game_parameters.pellet_pace = 1000000;
-
+	int option_count = 0;
+	char *buf = malloc(1024);
+	int value;
+	FILE *file = fopen("../game.cfg", "r");
+	if(file == NULL)
+		perror("Can't open file");
+	else
+		while(fgets(buf, 1024, file) != NULL) {
+			if(buf[0] != '#') {
+				value = atoi(buf);
+				switch(option_count) {
+					case 0: game_parameters.def_player_size = value; break;
+					case 1: game_parameters.def_pellet_size = value; break;
+					case 2: game_parameters.def_speed = value; break;
+					case 3: game_parameters.def_accel = value; break;
+					case 4: game_parameters.def_drag = value; break;
+					case 5: game_parameters.player_pace = (useconds_t)value; break;
+					case 6: game_parameters.pellet_pace = (useconds_t)value; break;
+					default: break;
+				}
+				option_count++;
+			}
+		}
+	fclose(file);
+	free(buf);
 	gamefield_t *gamefield = malloc(sizeof(gamefield_t));
 	xy_t size = {width, height};
 	gamefield->size = size;
@@ -91,7 +108,7 @@ int gamefield_add(gamefield_t* gamefield)
 	if(gamefield->players == NULL) return -1;
 	player_t player;
 	player.alive = 1;
-	player.color = 0; ///\todo Color.
+	player.color = gamefield->players_count + 1; //color equal player id
 	player.size = game_parameters.def_player_size;
 	player.position.x = rand()%gamefield->size.x;
 	player.position.y = rand()%gamefield->size.y;
@@ -112,13 +129,13 @@ void *cycle_make_pellet(void* v_gamefield)
 	{
 		gamefield->pellets = realloc(gamefield->pellets, (gamefield->pellets_count + 1) * sizeof(pellet_t));
 		pellet_t pellet;
-		pellet.color = 0; ///\todo Color.
+		pellet.color = 0;
 		pellet.size = game_parameters.def_pellet_size;
 		pellet.position.x = rand()%gamefield->size.x;
 		pellet.position.y = rand()%gamefield->size.y;
 		gamefield->pellets[gamefield->pellets_count] = pellet;
 		gamefield->pellets_count++;
-		usleep(game_parameters.pellet_pace); ///\todo Global timer.
+		usleep(game_parameters.pellet_pace);
 		pthread_testcancel();
 	}
 }
@@ -207,7 +224,7 @@ void *cycle_move(void* v_gamefield)
 				}
 			}
 		}
-		usleep(game_parameters.player_pace); ///\todo Global timer.
+		usleep(game_parameters.player_pace);
 		pthread_testcancel();
 	}
 }
@@ -322,38 +339,40 @@ void *cycle_controls_out(void* v_gamefield)
 					}
 				}
 		//Pellet collision detection
-		for(comp_who = 0; comp_who < gamefield->players_count; comp_who++)
-			for(comp_with = 0; comp_with < gamefield->pellets_count; comp_with++)
+
+		if(gamefield->players_count > 0)
+			for(comp_who = 0; comp_who < gamefield->players_count; comp_who++)
 			{
-				if(gamefield->players[comp_who].alive) //if player alive
+				for(comp_with = 0; comp_with < gamefield->pellets_count; comp_with++)
 				{
-					distance = sqrt( //hypotesis
-						pow(abs(gamefield->players[comp_who].position.x - gamefield->pellets[comp_with].position.x), 2) + //leg x
-						pow(abs(gamefield->players[comp_who].position.y - gamefield->pellets[comp_with].position.y), 2)); //leg y
-					if(distance <= gamefield->players[comp_who].size)
+					if(gamefield->players[comp_who].alive) //if player alive
 					{
-						//Size increase event
-						gamefield->players[comp_who].size += gamefield->pellets[comp_with].size;
-						event.event_id = EVENT_PLAYER_SIZE;
-						event.arg_x = comp_who;
-						event.arg_y = gamefield->pellets[comp_with].size;
-						if(event_set(event_glob_out, event) < 0)
-							perror("Can't set event");
-						//printf("PELLET %d: %f\n", comp_with, distance);
-						//Remove pellet from array
-						for(pellet_i = comp_with; pellet_i < gamefield->pellets_count - 1; pellet_i++)
+						distance = sqrt( //hypotesis
+							pow(abs(gamefield->players[comp_who].position.x - gamefield->pellets[comp_with].position.x), 2) + //leg x
+							pow(abs(gamefield->players[comp_who].position.y - gamefield->pellets[comp_with].position.y), 2)); //leg y
+						if(distance <= gamefield->players[comp_who].size)
 						{
-							gamefield->pellets[pellet_i] = gamefield->pellets[pellet_i+1];
+							//Size increase event
+							gamefield->players[comp_who].size += gamefield->pellets[comp_with].size;
+							event.event_id = EVENT_PLAYER_SIZE;
+							event.arg_x = comp_who;
+							event.arg_y = gamefield->pellets[comp_with].size;
+							if(event_set(event_glob_out, event) < 0)
+								perror("Can't set event");
+							//printf("PELLET %d: %f\n", comp_with, distance);
+							//Remove pellet from array
+							for(pellet_i = comp_with; pellet_i < gamefield->pellets_count - 1; pellet_i++)
+								gamefield->pellets[pellet_i] = gamefield->pellets[pellet_i+1];
 							gamefield->pellets_count--;
 							gamefield->pellets = realloc(gamefield->pellets, (gamefield->pellets_count) * sizeof(pellet_t));
+							//Pellet eaten event
+							event.event_id = EVENT_PELLET_EATEN;
+							event.arg_x = comp_who;
+							event.arg_y = comp_with;
+							if(event_set(event_glob_out, event) < 0)
+								perror("Can't set event");
+							break;
 						}
-						//Pellet eaten event
-						event.event_id = EVENT_PELLET_EATEN;
-						event.arg_x = comp_who;
-						event.arg_y = comp_with;
-						if(event_set(event_glob_out, event) < 0)
-							perror("Can't set event");
-						continue;
 					}
 				}
 			}

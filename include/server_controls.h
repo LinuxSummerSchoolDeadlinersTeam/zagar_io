@@ -4,6 +4,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <math.h>
+#include <string.h>
 
 #ifndef SERVER_CONTROLS_H
 #define SERVER_CONTROLS_H
@@ -16,7 +17,7 @@
 #define EVENT_PLAYER_SIZE 3
 ///Event id when player moves.\warning Need both args when used in event_t! x - player id and y = 1 - up, 2 - down, 3 - left, 4 - right and 0 - if all buttons released.
 #define EVENT_PLAYER_MOVE 4
-///Event id when syncronization needed.\warning No arguments needed.\todo Sync.
+///Event id when syncronization needed.\warning No arguments needed.
 #define EVENT_SYNC 5
 
 ///Struct for two values type of int.\note Used for coordinates, speed, or as argument for event.
@@ -39,7 +40,7 @@ typedef struct game_parameters {
 ///Struct containing player parameters.
 typedef struct player {
 	int alive; ///<		Player status. 1 - alive, 0 - dead.
-	int color; ///<		Player color.\todo Color type.
+	int color; ///<		Player color.
 	int size; ///<		Player size.
 	xy_t position; ///<	Player position on the field.
 	xy_t speed; ///<	Player speed in X, Y direction.
@@ -49,7 +50,7 @@ typedef struct player {
 
 ///Struct containing player parameters.
 typedef struct pellet {
-	int color; ///<		Pellet color.\todo Color type.
+	int color; ///<		Pellet color.
 	int size; ///<		Pellet size.
 	xy_t position; ///<	Pellet position on the field.
 } pellet_t;
