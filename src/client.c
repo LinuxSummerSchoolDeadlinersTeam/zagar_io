@@ -22,6 +22,7 @@ int SCREEN_HEIGHT = 768;
 const int current_player = 0;
 
 gamefield_t gamefield;
+game_parameters_t parameters;
 
 //SDL staff    
     
@@ -59,6 +60,42 @@ color_t get_rgb_color(int color_num)
     rgb.a=0;
     
     return rgb;
+}
+
+void move_player_right(bool direction)
+{
+    if (direction)
+    {
+        if( (gamefield.players[current_player].position.x + gamefield.players[current_player].size + 
+            parameters.def_speed) < gamefield.size.x)
+        {    
+            gamefield.players[current_player].position.x += parameters.def_speed;
+        }
+    }
+    else if( (gamefield.players[current_player].position.x - gamefield.players[current_player].size - 
+    parameters.def_speed) > 0)
+    {    
+        gamefield.players[current_player].position.x -= parameters.def_speed;
+    }
+        
+        
+}
+
+void move_player_down(bool direction)
+{
+    if( direction )
+    {
+        if( (gamefield.players[current_player].position.y + gamefield.players[current_player].size + 
+        parameters.def_speed) < gamefield.size.y)
+        {    
+            gamefield.players[current_player].position.y += parameters.def_speed;
+        }
+    }
+    else if( (gamefield.players[current_player].position.y - gamefield.players[current_player].size - 
+    parameters.def_speed) > 0)
+    {    
+        gamefield.players[current_player].position.y -= parameters.def_speed;
+    }
 }
 
 
@@ -159,6 +196,37 @@ void main_loop()
 		{
 			quit = true;
 		}
+		
+		if ( e.type == SDL_KEYDOWN )
+                {
+                    
+                    // TODO:
+                    // Send to server key pressed event
+                    
+                    switch(e.key.keysym.sym)
+                    {
+                        case SDLK_UP:
+                            move_player_down(false);
+                            break;
+                        
+                        case SDLK_DOWN:
+                            move_player_down(true);
+                            break;
+                        
+                            
+                        case SDLK_LEFT:
+                            move_player_right(false);
+                            break;
+                            
+                        case SDLK_RIGHT:
+                            move_player_right(true);
+                            break;
+                            
+                            
+                        default:
+                            break;
+                    }
+                }
 	}
 
 	//Clear screen
@@ -193,13 +261,16 @@ void create_gamefield(xy_t gsize)
     gamefield.size.x = gsize.x;
     gamefield.size.y = gsize.y;
     
+    parameters.def_size = 15;
+    parameters.def_speed = 5;
+    
     create_test_players(gamefield.players_count);
     create_test_pellets(gamefield.pellets_count);
 }
 
 int create_test_players(int count)
 {
-    int i=0, r = 15;
+    int i=0, r = parameters.def_size;
     
     do
     {
