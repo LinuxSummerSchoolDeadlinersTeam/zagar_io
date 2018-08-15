@@ -35,6 +35,9 @@ typedef struct game_parameters {
 	int def_drag; ///<		Default drag force.
 	useconds_t player_pace; ///<	Time in usec between every move cycle.
 	useconds_t pellet_pace; ///<	Time in usec between every pellet generation.
+	int field_width; ///<		Gamefield width.
+	int field_height; ///<		Gamefield height.
+	int field_size_mul; ///<	Game field multiplier.
 } game_parameters_t;
 
 ///Struct containing player parameters.
@@ -74,11 +77,9 @@ typedef struct event {
 } event_t;
 
 /**Create game field.
-\param width		Field width.
-\param heigth		Field heigth.
-\return gamefield_t*	Returns pointer to struct gamefield.
+\return gamefield_t*	Returns pointer to struct gamefield based on game.cfg file.
 */
-gamefield_t* gamefield_create(int width, int heigth);
+gamefield_t* gamefield_create();
 
 /**Add player to game field.
 \param gamefield	Gamefield struct pointer.

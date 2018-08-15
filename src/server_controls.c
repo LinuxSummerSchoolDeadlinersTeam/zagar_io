@@ -1,6 +1,7 @@
 #include "../include/server_controls.h"
 
 #define SERVER_CONTROLS_THREADS_COUNT 4
+#define MAX_PATH_LEN 4086
 game_parameters_t game_parameters;
 pthread_t *tid;
 event_t **event_glob_in;
@@ -63,13 +64,13 @@ int gamefield_free(gamefield_t* gamefield)
 	return 0;
 }
 
-gamefield_t* gamefield_create(int width, int height)
+gamefield_t* gamefield_create()
 {
 	srand(time(NULL));
 	pthread_spin_init(&spinlock_pellets, PTHREAD_PROCESS_SHARED);
 	pthread_spin_init(&spinlock_event, PTHREAD_PROCESS_SHARED);
 	int option_count = 0;
-	char *buf = malloc(1024);
+	char *buf = malloc(MAX_PATH_LEN);
 	int value;
 	FILE *file = fopen("game.cfg", "r");
 	if(file == NULL)
@@ -78,7 +79,7 @@ gamefield_t* gamefield_create(int width, int height)
 		return NULL;
 	}
 	else
-		while(fgets(buf, 1024, file) != NULL) {
+		while(fgets(buf, MAX_PATH_LEN, file) != NULL) {
 			if(buf[0] != '#') {
 				value = atoi(buf);
 				switch(option_count) {
@@ -89,6 +90,9 @@ gamefield_t* gamefield_create(int width, int height)
 					case 4: game_parameters.def_drag = value; break;
 					case 5: game_parameters.player_pace = (useconds_t)value; break;
 					case 6: game_parameters.pellet_pace = (useconds_t)value; break;
+					case 7: game_parameters.field_width = value; break;
+					case 8: game_parameters.field_height = value; break;
+					case 9: game_parameters.field_size_mul = value; break;
 					default: break;
 				}
 				option_count++;
@@ -97,7 +101,7 @@ gamefield_t* gamefield_create(int width, int height)
 	fclose(file);
 	free(buf);
 	gamefield_t *gamefield = malloc(sizeof(gamefield_t));
-	xy_t size = {width, height};
+	xy_t size = {game_parameters.field_width * game_parameters.field_size_mul, game_parameters.field_height * game_parameters.field_size_mul};
 	gamefield->size = size;
 	gamefield->players = malloc(0);
 	gamefield->players_count = 0;
@@ -333,7 +337,6 @@ void *cycle_controls_out(void* v_gamefield)
 							event.arg_y = comp_with;
 							if(event_set(event_glob_out, event) < 0)
 								perror("cycle_controls_out: Can't set event");
-							continue;
 							//Player size change
 							gamefield->players[comp_who].size += gamefield->players[comp_with].size;
 							event.event_id = EVENT_PLAYER_SIZE;
@@ -341,6 +344,7 @@ void *cycle_controls_out(void* v_gamefield)
 							event.arg_y = gamefield->players[comp_with].size;
 							if(event_set(event_glob_out, event) < 0)
 								perror("cycle_controls_out: Can't set event");
+							continue;
 						}
 						if(distance <= gamefield->players[comp_with].size)
 						{
@@ -350,7 +354,6 @@ void *cycle_controls_out(void* v_gamefield)
 							event.arg_y = comp_who;
 							if(event_set(event_glob_out, event) < 0)
 								perror("cycle_controls_out: Can't set event");
-							continue;
 							//Player size change
 							gamefield->players[comp_with].size += gamefield->players[comp_who].size;
 							event.event_id = EVENT_PLAYER_SIZE;
@@ -358,6 +361,7 @@ void *cycle_controls_out(void* v_gamefield)
 							event.arg_y = gamefield->players[comp_who].size;
 							if(event_set(event_glob_out, event) < 0)
 								perror("cycle_controls_out: Can't set event");
+							continue;
 						}
 					}
 				}

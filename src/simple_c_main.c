@@ -215,7 +215,7 @@ void main_loop(void *v_gamefield, event_t **event_in)
 
 int main()
 {
-	gamefield_t* gamefield = gamefield_create(1280, 720);
+	gamefield_t* gamefield = gamefield_create();
 	if(gamefield==NULL) return -1;
 	gamefield_add(gamefield);
 	gamefield_add(gamefield);
