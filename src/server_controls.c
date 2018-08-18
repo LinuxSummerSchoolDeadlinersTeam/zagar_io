@@ -2,10 +2,11 @@
 
 #define SERVER_CONTROLS_THREADS_COUNT 4
 #define MAX_PATH_LEN 4086
+
 game_parameters_t game_parameters;
-pthread_t *tid;
-event_t **event_glob_in;
-event_t **event_glob_out;
+pthread_t *tid_controls;
+event_t **event_glob_controls_in;
+event_t **event_glob_controls_out;
 pthread_spinlock_t spinlock_pellets;
 pthread_spinlock_t spinlock_event;
 
@@ -15,15 +16,15 @@ int gamefield_free(gamefield_t* gamefield)
 	//Cancel threads
 	for(i = 0; i < SERVER_CONTROLS_THREADS_COUNT; i++)
 	{
-		pthread_cancel(tid[i]);
-		pthread_join(tid[i], NULL);
+		pthread_cancel(tid_controls[i]);
+		pthread_join(tid_controls[i], NULL);
 	}
-	free(tid);
+	free(tid_controls);
 	//Free events lists
-	if(*event_glob_in != NULL)
+	if(*event_glob_controls_in != NULL)
 	{
 		event_t *event_ptr;
-		event_ptr = *event_glob_in;
+		event_ptr = *event_glob_controls_in;
 		if(event_ptr->next == NULL)
 			free(event_ptr);
 		else
@@ -38,10 +39,10 @@ int gamefield_free(gamefield_t* gamefield)
 			free(event_ptr);
 		}
 	}
-	if(*event_glob_out != NULL)
+	if(*event_glob_controls_out != NULL)
 	{
 		event_t *event_ptr;
-		event_ptr = *event_glob_out;
+		event_ptr = *event_glob_controls_out;
 		if(event_ptr->next == NULL)
 			free(event_ptr);
 		else
@@ -61,6 +62,7 @@ int gamefield_free(gamefield_t* gamefield)
 	free(gamefield->pellets);
 	free(gamefield);
 	pthread_spin_destroy(&spinlock_event);
+	pthread_spin_destroy(&spinlock_pellets);
 	return 0;
 }
 
@@ -257,7 +259,7 @@ void *cycle_controls_in(void* v_gamefield)
 	while(1)
 	{
 		//event = event_get(event_in);
-		event = event_get(event_glob_in);
+		event = event_get(event_glob_controls_in);
 		if(event.event_id != -1) //if event got
 			if(gamefield->players[event.arg_x].alive) //if palyer alive
 				switch(event.event_id) {
@@ -309,7 +311,7 @@ void *cycle_controls_out(void* v_gamefield)
 		//event.arg_y =i;
 		//event.next=NULL;
 		//if(event_set(event_out, event) < 0)
-	 	//if(event_set(event_glob_out, event) < 0)
+	 	//if(event_set(event_glob_controls_out, event) < 0)
 		//	perror("Can't set event");
 		//sleep(1);
 		event.next = NULL;
@@ -335,14 +337,14 @@ void *cycle_controls_out(void* v_gamefield)
 							event.event_id = EVENT_PLAYER_EATEN;
 							event.arg_x = comp_who;
 							event.arg_y = comp_with;
-							if(event_set(event_glob_out, event) < 0)
+							if(event_set(event_glob_controls_out, event) < 0)
 								perror("cycle_controls_out: Can't set event");
 							//Player size change
 							gamefield->players[comp_who].size += gamefield->players[comp_with].size;
 							event.event_id = EVENT_PLAYER_SIZE;
 							event.arg_x = comp_who;
 							event.arg_y = gamefield->players[comp_with].size;
-							if(event_set(event_glob_out, event) < 0)
+							if(event_set(event_glob_controls_out, event) < 0)
 								perror("cycle_controls_out: Can't set event");
 							continue;
 						}
@@ -352,14 +354,14 @@ void *cycle_controls_out(void* v_gamefield)
 							gamefield->players[comp_who].alive = 0;
 							event.arg_x = comp_with;
 							event.arg_y = comp_who;
-							if(event_set(event_glob_out, event) < 0)
+							if(event_set(event_glob_controls_out, event) < 0)
 								perror("cycle_controls_out: Can't set event");
 							//Player size change
 							gamefield->players[comp_with].size += gamefield->players[comp_who].size;
 							event.event_id = EVENT_PLAYER_SIZE;
 							event.arg_x = comp_with;
 							event.arg_y = gamefield->players[comp_who].size;
-							if(event_set(event_glob_out, event) < 0)
+							if(event_set(event_glob_controls_out, event) < 0)
 								perror("cycle_controls_out: Can't set event");
 							continue;
 						}
@@ -384,7 +386,7 @@ void *cycle_controls_out(void* v_gamefield)
 							event.event_id = EVENT_PLAYER_SIZE;
 							event.arg_x = comp_who;
 							event.arg_y = gamefield->pellets[comp_with].size;
-							if(event_set(event_glob_out, event) < 0)
+							if(event_set(event_glob_controls_out, event) < 0)
 								perror("cycle_controls_out: Can't set event");
 							//printf("PELLET %d: %f\n", comp_with, distance);
 							//Remove pellet from array
@@ -398,7 +400,7 @@ void *cycle_controls_out(void* v_gamefield)
 							event.event_id = EVENT_PELLET_EATEN;
 							event.arg_x = comp_who;
 							event.arg_y = comp_with;
-							if(event_set(event_glob_out, event) < 0)
+							if(event_set(event_glob_controls_out, event) < 0)
 								perror("cycle_controls_out: Can't set event");
 							break;
 						}
@@ -412,27 +414,27 @@ void *cycle_controls_out(void* v_gamefield)
 int gamefield_start(gamefield_t* gamefield, event_t** event_out, event_t** event_in)
 {
 	//struct gamefield_and_events gamefield_and_events_in, gamefield_and_events_out;
-	tid = malloc(SERVER_CONTROLS_THREADS_COUNT * sizeof(pthread_t));
-	event_glob_out = event_out;
-	event_glob_in = event_in;
-	if(tid == NULL)
+	tid_controls = malloc(SERVER_CONTROLS_THREADS_COUNT * sizeof(pthread_t));
+	event_glob_controls_out = event_out;
+	event_glob_controls_in = event_in;
+	if(tid_controls == NULL)
 		return -1;
 
-	if(pthread_create(&tid[0], NULL, cycle_make_pellet, gamefield) > 0)
+	if(pthread_create(&tid_controls[0], NULL, cycle_make_pellet, gamefield) > 0)
 		return -1;
 
-	if(pthread_create(&tid[1], NULL, cycle_move, gamefield) > 0)
+	if(pthread_create(&tid_controls[1], NULL, cycle_move, gamefield) > 0)
 		return -1;
 
 	//gamefield_and_events_in.gamefield = gamefield;
 	//gamefield_and_events_in.event = &event_in;
-	//if(pthread_create(&tid[2], NULL, cycle_controls_in, &gamefield_and_events_in) > 0)
-	if(pthread_create(&tid[2], NULL, cycle_controls_in, gamefield) > 0)
+	//if(pthread_create(&tid_controls[2], NULL, cycle_controls_in, &gamefield_and_events_in) > 0)
+	if(pthread_create(&tid_controls[2], NULL, cycle_controls_in, gamefield) > 0)
 		return -1;
 	//gamefield_and_events_out.gamefield = gamefield;
 	//gamefield_and_events_out.event = &event_out;
-	//if(pthread_create(&tid[3], NULL, cycle_controls_out, &gamefield_and_events_out) > 0)
-	if(pthread_create(&tid[3], NULL, cycle_controls_out, gamefield) > 0)
+	//if(pthread_create(&tid_controls[3], NULL, cycle_controls_out, &gamefield_and_events_out) > 0)
+	if(pthread_create(&tid_controls[3], NULL, cycle_controls_out, gamefield) > 0)
 		return -1;
 	return 0;
 }

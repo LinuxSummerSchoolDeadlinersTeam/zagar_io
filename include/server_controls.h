@@ -110,7 +110,7 @@ int event_set(event_t** event_list, event_t event);
 
 /**Get event from event list.
 \param event_list	Address of (pointer to) event list pointer.
-\return event_t		Return last event from list, or event_t with event_id = 0 if no events found.
+\return event_t		Return last event from list, or event_t with event_id = -1 if no events found.
 */
 event_t event_get(event_t** event_list);
 
