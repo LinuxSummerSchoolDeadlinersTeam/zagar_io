@@ -1,5 +1,7 @@
 //Main with sending events from server_controls.c when button pressed
 #include "../include/server_controls.h"
+#include "../include/server_networking.h"
+#include "../include/client_networking.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <stdio.h>
@@ -122,7 +124,7 @@ void closemy()
 	SDL_Quit();
 }
 
-void main_loop(void *v_gamefield, event_t **event_in)
+void main_loop(void *v_gamefield, int player_id)
 {
 	gamefield_t *gamefield = (gamefield_t *)v_gamefield;
     int i = 0;
@@ -130,7 +132,7 @@ void main_loop(void *v_gamefield, event_t **event_in)
 
 	event_t event;
 	event.event_id = EVENT_PLAYER_MOVE;
-	event.arg_x = 0;
+	event.arg_x = player_id;
 	event.next = NULL;
 	//Handle events on queue
 	while (SDL_PollEvent(&e) != 0)
@@ -143,8 +145,7 @@ void main_loop(void *v_gamefield, event_t **event_in)
 		if ( e.type == SDL_KEYUP )
 		{
 			event.arg_y = 0;
-			if(event_set(event_in, event) < 0)
-				perror("cycle_controls_out: Can't set event");
+			send_event(event);
 		}
 		if ( e.type == SDL_KEYDOWN )
                 {
@@ -156,25 +157,21 @@ void main_loop(void *v_gamefield, event_t **event_in)
                     {
                         case SDLK_UP:
                             event.arg_y = 1;
-                            if(event_set(event_in, event) < 0)
-								perror("cycle_controls_out: Can't set event");
+                            send_event(event);
                             break;
                         
                         case SDLK_DOWN:
                             event.arg_y = 2;
-                            if(event_set(event_in, event) < 0)
-								perror("cycle_controls_out: Can't set event");
+                            send_event(event);
                             break;
                         case SDLK_LEFT:
                             event.arg_y = 3;
-                            if(event_set(event_in, event) < 0)
-								perror("cycle_controls_out: Can't set event");
+                            send_event(event);
                             break;
                             
                         case SDLK_RIGHT:
                             event.arg_y = 4;
-                            if(event_set(event_in, event) < 0)
-								perror("cycle_controls_out: Can't set event");
+                            send_event(event);
                             break;
                             
                             
@@ -217,12 +214,13 @@ int main()
 {
 	gamefield_t* gamefield = gamefield_create();
 	if(gamefield==NULL) return -1;
-	gamefield_add(gamefield);
-	gamefield_add(gamefield);
+	//gamefield_add(gamefield);
+	//gamefield_add(gamefield);
 	event_t *event_out = NULL;
 	event_t *event_in = NULL;
 	gamefield_start(gamefield, &event_out, &event_in);
-
+	networking_start(gamefield, &event_out, &event_in);
+	int player = connect_to_server();
 	if (!initmy())
     {
             printf("Failed to initialize!\n");
@@ -231,7 +229,9 @@ int main()
     {
         while (!quit)
         {
-            main_loop(gamefield, &event_in);
+            main_loop(gamefield, player);
+            event_t event = listen_event();
+            if(event.event_id != -1) printf("%d\n", event.event_id);
         }
         
     }
@@ -239,5 +239,6 @@ int main()
     //Free resources and close SDL
     closemy();
 	gamefield_free(gamefield);
+	networking_free();
 	return 0;
 }
