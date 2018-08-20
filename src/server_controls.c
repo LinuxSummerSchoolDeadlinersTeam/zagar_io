@@ -1,10 +1,13 @@
 #include "../include/server_controls.h"
 
 #define SERVER_CONTROLS_THREADS_COUNT 4
+#define MAX_PATH_LEN 4086
+
 game_parameters_t game_parameters;
-pthread_t *tid;
-event_t **event_glob_in;
-event_t **event_glob_out;
+pthread_t *tid_controls;
+event_t **event_glob_controls_in;
+event_t **event_glob_controls_out;
+pthread_spinlock_t spinlock_pellets;
 pthread_spinlock_t spinlock_event;
 
 int gamefield_free(gamefield_t* gamefield)
@@ -13,15 +16,15 @@ int gamefield_free(gamefield_t* gamefield)
 	//Cancel threads
 	for(i = 0; i < SERVER_CONTROLS_THREADS_COUNT; i++)
 	{
-		pthread_cancel(tid[i]);
-		pthread_join(tid[i], NULL);
+		pthread_cancel(tid_controls[i]);
+		pthread_join(tid_controls[i], NULL);
 	}
-	free(tid);
+	free(tid_controls);
 	//Free events lists
-	if(*event_glob_in != NULL)
+	if(*event_glob_controls_in != NULL)
 	{
 		event_t *event_ptr;
-		event_ptr = *event_glob_in;
+		event_ptr = *event_glob_controls_in;
 		if(event_ptr->next == NULL)
 			free(event_ptr);
 		else
@@ -36,10 +39,10 @@ int gamefield_free(gamefield_t* gamefield)
 			free(event_ptr);
 		}
 	}
-	if(*event_glob_out != NULL)
+	if(*event_glob_controls_out != NULL)
 	{
 		event_t *event_ptr;
-		event_ptr = *event_glob_out;
+		event_ptr = *event_glob_controls_out;
 		if(event_ptr->next == NULL)
 			free(event_ptr);
 		else
@@ -59,24 +62,26 @@ int gamefield_free(gamefield_t* gamefield)
 	free(gamefield->pellets);
 	free(gamefield);
 	pthread_spin_destroy(&spinlock_event);
+	pthread_spin_destroy(&spinlock_pellets);
 	return 0;
 }
 
-gamefield_t* gamefield_create(int width, int height)
+gamefield_t* gamefield_create()
 {
 	srand(time(NULL));
+	pthread_spin_init(&spinlock_pellets, PTHREAD_PROCESS_SHARED);
 	pthread_spin_init(&spinlock_event, PTHREAD_PROCESS_SHARED);
 	int option_count = 0;
-	char *buf = malloc(1024);
+	char *buf = malloc(MAX_PATH_LEN);
 	int value;
 	FILE *file = fopen("game.cfg", "r");
 	if(file == NULL)
 	{
-		perror("Can't open file");
+		perror("Can't open game.cfg file");
 		return NULL;
 	}
 	else
-		while(fgets(buf, 1024, file) != NULL) {
+		while(fgets(buf, MAX_PATH_LEN, file) != NULL) {
 			if(buf[0] != '#') {
 				value = atoi(buf);
 				switch(option_count) {
@@ -87,6 +92,9 @@ gamefield_t* gamefield_create(int width, int height)
 					case 4: game_parameters.def_drag = value; break;
 					case 5: game_parameters.player_pace = (useconds_t)value; break;
 					case 6: game_parameters.pellet_pace = (useconds_t)value; break;
+					case 7: game_parameters.field_width = value; break;
+					case 8: game_parameters.field_height = value; break;
+					case 9: game_parameters.field_size_mul = value; break;
 					default: break;
 				}
 				option_count++;
@@ -95,7 +103,7 @@ gamefield_t* gamefield_create(int width, int height)
 	fclose(file);
 	free(buf);
 	gamefield_t *gamefield = malloc(sizeof(gamefield_t));
-	xy_t size = {width, height};
+	xy_t size = {game_parameters.field_width * game_parameters.field_size_mul, game_parameters.field_height * game_parameters.field_size_mul};
 	gamefield->size = size;
 	gamefield->players = malloc(0);
 	gamefield->players_count = 0;
@@ -110,6 +118,7 @@ int gamefield_add(gamefield_t* gamefield)
 	gamefield->players = realloc(gamefield->players, (gamefield->players_count + 1) * sizeof(player_t));
 	if(gamefield->players == NULL) return -1;
 	player_t player;
+	player.id = player_id;
 	player.alive = 1;
 	player.color = gamefield->players_count + 1; //color equal player id
 	player.size = game_parameters.def_player_size;
@@ -130,6 +139,7 @@ void *cycle_make_pellet(void* v_gamefield)
 	gamefield_t *gamefield = v_gamefield;
 	while(1)
 	{
+		pthread_spin_lock(&spinlock_pellets);
 		gamefield->pellets = realloc(gamefield->pellets, (gamefield->pellets_count + 1) * sizeof(pellet_t));
 		pellet_t pellet;
 		pellet.color = 0;
@@ -138,6 +148,7 @@ void *cycle_make_pellet(void* v_gamefield)
 		pellet.position.y = rand()%gamefield->size.y;
 		gamefield->pellets[gamefield->pellets_count] = pellet;
 		gamefield->pellets_count++;
+		pthread_spin_unlock(&spinlock_pellets);
 		usleep(game_parameters.pellet_pace);
 		pthread_testcancel();
 	}
@@ -192,7 +203,7 @@ void *cycle_move(void* v_gamefield)
 					if(gamefield->players[i].speed.y + gamefield->players[i].drag < 0)
 						gamefield->players[i].speed.y += gamefield->players[i].drag;
 					else
-						gamefield->players[i].speed.x = 0;
+						gamefield->players[i].speed.y = 0;
 				//Move
 				gamefield->players[i].position.x += gamefield->players[i].speed.x;
 				gamefield->players[i].position.y += gamefield->players[i].speed.y;
@@ -248,7 +259,7 @@ void *cycle_controls_in(void* v_gamefield)
 	while(1)
 	{
 		//event = event_get(event_in);
-		event = event_get(event_glob_in);
+		event = event_get(event_glob_controls_in);
 		if(event.event_id != -1) //if event got
 			if(gamefield->players[event.arg_x].alive) //if palyer alive
 				switch(event.event_id) {
@@ -300,11 +311,10 @@ void *cycle_controls_out(void* v_gamefield)
 		//event.arg_y =i;
 		//event.next=NULL;
 		//if(event_set(event_out, event) < 0)
-	 	//if(event_set(event_glob_out, event) < 0)
+	 	//if(event_set(event_glob_controls_out, event) < 0)
 		//	perror("Can't set event");
 		//sleep(1);
 		event.next = NULL;
-		event.event_id = EVENT_PLAYER_EATEN;
 		//Player collision detection
 		if(gamefield->players_count > 1)
 			for(comp_who = 0; comp_who < gamefield->players_count - 1; comp_who++)
@@ -320,22 +330,38 @@ void *cycle_controls_out(void* v_gamefield)
 						//{
 						//	printf("DIST: %f\n", distance);
 						//}
-						//Player eaten event
 						if(distance <= gamefield->players[comp_who].size)
 						{
+							//Player eaten event
 							gamefield->players[comp_with].alive = 0;
+							event.event_id = EVENT_PLAYER_EATEN;
 							event.arg_x = comp_who;
 							event.arg_y = comp_with;
-							if(event_set(event_glob_out, event) < 0)
+							if(event_set(event_glob_controls_out, event) < 0)
+								perror("cycle_controls_out: Can't set event");
+							//Player size change
+							gamefield->players[comp_who].size += gamefield->players[comp_with].size;
+							event.event_id = EVENT_PLAYER_SIZE;
+							event.arg_x = comp_who;
+							event.arg_y = gamefield->players[comp_with].size;
+							if(event_set(event_glob_controls_out, event) < 0)
 								perror("cycle_controls_out: Can't set event");
 							continue;
 						}
 						if(distance <= gamefield->players[comp_with].size)
 						{
+							//Player eaten event
 							gamefield->players[comp_who].alive = 0;
 							event.arg_x = comp_with;
 							event.arg_y = comp_who;
-							if(event_set(event_glob_out, event) < 0)
+							if(event_set(event_glob_controls_out, event) < 0)
+								perror("cycle_controls_out: Can't set event");
+							//Player size change
+							gamefield->players[comp_with].size += gamefield->players[comp_who].size;
+							event.event_id = EVENT_PLAYER_SIZE;
+							event.arg_x = comp_with;
+							event.arg_y = gamefield->players[comp_who].size;
+							if(event_set(event_glob_controls_out, event) < 0)
 								perror("cycle_controls_out: Can't set event");
 							continue;
 						}
@@ -360,19 +386,21 @@ void *cycle_controls_out(void* v_gamefield)
 							event.event_id = EVENT_PLAYER_SIZE;
 							event.arg_x = comp_who;
 							event.arg_y = gamefield->pellets[comp_with].size;
-							if(event_set(event_glob_out, event) < 0)
+							if(event_set(event_glob_controls_out, event) < 0)
 								perror("cycle_controls_out: Can't set event");
 							//printf("PELLET %d: %f\n", comp_with, distance);
 							//Remove pellet from array
+							pthread_spin_lock(&spinlock_pellets);
 							for(pellet_i = comp_with; pellet_i < gamefield->pellets_count - 1; pellet_i++)
 								gamefield->pellets[pellet_i] = gamefield->pellets[pellet_i+1];
 							gamefield->pellets_count--;
 							gamefield->pellets = realloc(gamefield->pellets, (gamefield->pellets_count) * sizeof(pellet_t));
+							pthread_spin_unlock(&spinlock_pellets);
 							//Pellet eaten event
 							event.event_id = EVENT_PELLET_EATEN;
 							event.arg_x = comp_who;
 							event.arg_y = comp_with;
-							if(event_set(event_glob_out, event) < 0)
+							if(event_set(event_glob_controls_out, event) < 0)
 								perror("cycle_controls_out: Can't set event");
 							break;
 						}
@@ -386,27 +414,27 @@ void *cycle_controls_out(void* v_gamefield)
 int gamefield_start(gamefield_t* gamefield, event_t** event_out, event_t** event_in)
 {
 	//struct gamefield_and_events gamefield_and_events_in, gamefield_and_events_out;
-	tid = malloc(SERVER_CONTROLS_THREADS_COUNT * sizeof(pthread_t));
-	event_glob_out = event_out;
-	event_glob_in = event_in;
-	if(tid == NULL)
+	tid_controls = malloc(SERVER_CONTROLS_THREADS_COUNT * sizeof(pthread_t));
+	event_glob_controls_out = event_out;
+	event_glob_controls_in = event_in;
+	if(tid_controls == NULL)
 		return -1;
 
-	if(pthread_create(&tid[0], NULL, cycle_make_pellet, gamefield) > 0)
+	if(pthread_create(&tid_controls[0], NULL, cycle_make_pellet, gamefield) > 0)
 		return -1;
 
-	if(pthread_create(&tid[1], NULL, cycle_move, gamefield) > 0)
+	if(pthread_create(&tid_controls[1], NULL, cycle_move, gamefield) > 0)
 		return -1;
 
 	//gamefield_and_events_in.gamefield = gamefield;
 	//gamefield_and_events_in.event = &event_in;
-	//if(pthread_create(&tid[2], NULL, cycle_controls_in, &gamefield_and_events_in) > 0)
-	if(pthread_create(&tid[2], NULL, cycle_controls_in, gamefield) > 0)
+	//if(pthread_create(&tid_controls[2], NULL, cycle_controls_in, &gamefield_and_events_in) > 0)
+	if(pthread_create(&tid_controls[2], NULL, cycle_controls_in, gamefield) > 0)
 		return -1;
 	//gamefield_and_events_out.gamefield = gamefield;
 	//gamefield_and_events_out.event = &event_out;
-	//if(pthread_create(&tid[3], NULL, cycle_controls_out, &gamefield_and_events_out) > 0)
-	if(pthread_create(&tid[3], NULL, cycle_controls_out, gamefield) > 0)
+	//if(pthread_create(&tid_controls[3], NULL, cycle_controls_out, &gamefield_and_events_out) > 0)
+	if(pthread_create(&tid_controls[3], NULL, cycle_controls_out, gamefield) > 0)
 		return -1;
 	return 0;
 }

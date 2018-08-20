@@ -35,10 +35,14 @@ typedef struct game_parameters {
 	int def_drag; ///<		Default drag force.
 	useconds_t player_pace; ///<	Time in usec between every move cycle.
 	useconds_t pellet_pace; ///<	Time in usec between every pellet generation.
+	int field_width; ///<		Gamefield width.
+	int field_height; ///<		Gamefield height.
+	int field_size_mul; ///<	Game field multiplier.
 } game_parameters_t;
 
 ///Struct containing player parameters.
 typedef struct player {
+	int id; ///<		Player id.
 	int alive; ///<		Player status. 1 - alive, 0 - dead.
 	int color; ///<		Player color.
 	int size; ///<		Player size.
@@ -73,11 +77,9 @@ typedef struct event {
 } event_t;
 
 /**Create game field.
-\param width		Field width.
-\param heigth		Field heigth.
-\return gamefield_t*	Returns pointer to struct gamefield.
+\return gamefield_t*	Returns pointer to struct gamefield based on game.cfg file.
 */
-gamefield_t* gamefield_create(int width, int heigth);
+gamefield_t* gamefield_create();
 
 /**Add player to game field.
 \param gamefield	Gamefield struct pointer.
@@ -108,7 +110,7 @@ int event_set(event_t** event_list, event_t event);
 
 /**Get event from event list.
 \param event_list	Address of (pointer to) event list pointer.
-\return event_t		Return last event from list, or event_t with event_id = 0 if no events found.
+\return event_t		Return last event from list, or event_t with event_id = -1 if no events found.
 */
 event_t event_get(event_t** event_list);
 
