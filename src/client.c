@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <malloc.h>
 #include "../include/server_controls.h"
+#include "../include/client_networking.h"
 
 typedef struct rgb_color
 {
@@ -261,7 +262,7 @@ void create_gamefield(xy_t gsize)
     gamefield.size.x = gsize.x;
     gamefield.size.y = gsize.y;
     
-    parameters.def_size = 15;
+    parameters.def_player_size = 15;
     parameters.def_speed = 5;
     
     create_test_players(gamefield.players_count);
@@ -270,7 +271,7 @@ void create_gamefield(xy_t gsize)
 
 int create_test_players(int count)
 {
-    int i=0, r = parameters.def_size;
+    int i=0, r = parameters.def_player_size;
     
     do
     {
